@@ -5,3 +5,4 @@ SciPy
 Joblib
 Scikit-learn
 Matplotlib
+gunicorn
