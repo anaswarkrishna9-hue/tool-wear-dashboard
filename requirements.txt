@@ -6,3 +6,4 @@ Joblib
 Scikit-learn
 Matplotlib
 gunicorn
+gdown
