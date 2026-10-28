@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Predictive Tool Wear Analysis & Continuous Monitoring</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg-dark: #0b0f19;
+            --card-bg: #111827;
+            --border-color: #1f2937;
+            --accent-cyan: #06b6d4;
+            --accent-green: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-rose: #f43f5e;
+        }
+        body {
+            background-color: var(--bg-dark);
+            color: #e2e8f0;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            min-height: 100vh;
+        }
+        .navbar-brand-title {
+            font-size: 1.15rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            color: #38bdf8;
+        }
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+        }
+        .kpi-card {
+            border-left: 4px solid var(--accent-cyan);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .kpi-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .kpi-title {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #94a3b8;
+        }
+        .kpi-value {
+            font-size: 1.9rem;
+            font-weight: 800;
+            line-height: 1.1;
+        }
+        .badge-healthy {
+            background-color: rgba(16, 185, 129, 0.2);
+            color: #34d399;
+            border: 1px solid #10b981;
+        }
+        .badge-warning {
+            background-color: rgba(245, 158, 11, 0.2);
+            color: #fbbf24;
+            border: 1px solid #f59e0b;
+        }
+        .badge-critical {
+            background-color: rgba(244, 63, 94, 0.2);
+            color: #fb7185;
+            border: 1px solid #f43f5e;
+            animation: pulse-border 1.5s infinite;
+        }
+        @keyframes pulse-border {
+            0% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.4); }
+            70% { box-shadow: 0 0 0 8px rgba(244, 63, 94, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(244, 63, 94, 0); }
+        }
+        .chart-container {
+            position: relative;
+            height: 250px;
+            width: 100%;
+        }
+        .alert-terminal {
+            height: 260px;
+            overflow-y: auto;
+            background: #060913;
+            border: 1px solid #1e293b;
+            font-family: 'Consolas', monospace;
+            font-size: 0.82rem;
+            padding: 10px;
+            border-radius: 6px;
+        }
+        .alert-entry {
+            margin-bottom: 6px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #1e293b;
+        }
+        .progress-thin {
+            height: 7px;
+            border-radius: 4px;
+            background-color: #1e293b;
+        }
+        .table-custom th {
+            background-color: #172134;
+            color: #94a3b8;
+            font-weight: 600;
+            font-size: 0.8rem;
+            border-color: #1e293b;
+        }
+        .table-custom td {
+            font-size: 0.83rem;
+            border-color: #1e293b;
+        }
+    </style>
+</head>
+<body class="p-2 p-md-3">
+
+    <!-- Top Navigation Bar -->
+    <header class="navbar navbar-expand-lg px-3 py-2 rounded mb-3 card flex-row justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-2">
+            <span class="fs-4 text-info"><i class="bi bi-cpu"></i></span>
+            <div>
+                <span class="navbar-brand-title d-block">PREDICTIVE TOOL WEAR ANALYSIS SYSTEM</span>
+                <small class="text-secondary" style="font-size: 0.75rem;">
+                    SCTCE Mechanical & Automobile Eng. • NASA Milling Dataset • Online Sensor Monitoring
+                </small>
+            </div>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <span class="badge bg-dark border border-secondary text-light px-2 py-1">
+                <i class="bi bi-activity text-success"></i> Stream Engine: <span id="streamStatus">IDLE</span>
+            </span>
+            <span class="badge bg-info-subtle text-info-emphasis border border-info px-2 py-1">
+                Matsuura MC-510V
+            </span>
+        </div>
+    </header>
+
+    <!-- Machining Control Ribbon -->
+    <div class="card p-3 mb-3">
+        <div class="row g-3 align-items-end">
+            <!-- Case Selection -->
+            <div class="col-12 col-md-3">
+                <label class="form-label text-secondary small fw-semibold">
+                    <i class="bi bi-gear-wide-connected"></i> Experimental Cutting Case
+                </label>
+                <select id="caseSelect" class="form-select form-select-sm bg-dark border-secondary text-light">
+                    <!-- Populated dynamically via JS -->
+                </select>
+            </div>
+
+            <!-- Model Selection -->
+            <div class="col-12 col-md-3">
+                <label class="form-label text-secondary small fw-semibold">
+                    <i class="bi bi-robot"></i> Machine Learning Model
+                </label>
+                <select id="modelSelect" class="form-select form-select-sm bg-dark border-secondary text-light">
+                    <!-- Populated dynamically -->
+                </select>
+            </div>
+
+            <!-- Controls: Play, Step, Pause, Reset -->
+            <div class="col-12 col-md-4 d-flex gap-2">
+                <button id="btnPlay" class="btn btn-sm btn-success px-3 fw-semibold flex-grow-1" onclick="startContinuousStream()">
+                    <i class="bi bi-play-fill"></i> Start Monitoring
+                </button>
+                <button id="btnPause" class="btn btn-sm btn-outline-warning px-3" onclick="pauseContinuousStream()" disabled>
+                    <i class="bi bi-pause-fill"></i> Pause
+                </button>
+                <button id="btnStep" class="btn btn-sm btn-outline-info px-3" onclick="stepSingleCut()">
+                    <i class="bi bi-skip-forward-fill"></i> Step Pass
+                </button>
+                <button id="btnReset" class="btn btn-sm btn-outline-secondary px-3" onclick="resetMachiningRun()">
+                    <i class="bi bi-arrow-counterclockwise"></i> Reset
+                </button>
+            </div>
+
+            <!-- Stream Speed Slider -->
+            <div class="col-12 col-md-2">
+                <label class="form-label text-secondary small fw-semibold d-flex justify-content-between">
+                    <span>Speed</span> <span id="speedVal" class="text-info">1.2s</span>
+                </label>
+                <input type="range" class="form-range" id="speedSlider" min="300" max="2500" step="100" value="1200">
+            </div>
+        </div>
+    </div>
+
+    <!-- Live Telemetry KPI Cards -->
+    <div class="row g-3 mb-3">
+        <!-- Predicted Wear -->
+        <div class="col-12 col-sm-6 col-lg-3">
+            <div class="card p-3 kpi-card h-100" style="border-left-color: var(--accent-cyan);">
+                <div class="kpi-title mb-1">Predicted Flank Wear (VB)</div>
+                <div class="d-flex align-items-baseline gap-2 mb-2">
+                    <span id="kpiPredVb" class="kpi-value text-info">0.000</span>
+                    <span class="text-secondary small fw-semibold">mm</span>
+                </div>
+                <div class="progress progress-thin mb-1">
+                    <div id="vbProgressBar" class="progress-bar bg-info" style="width: 0%"></div>
+                </div>
+                <small class="text-secondary d-flex justify-content-between" style="font-size: 0.72rem;">
+                    <span>0.0 mm</span><span>Warning: 0.20 mm</span><span>Limit: 0.40 mm</span>
+                </small>
+            </div>
+        </div>
+
+        <!-- Tool Health Condition -->
+        <div class="col-12 col-sm-6 col-lg-3">
+            <div class="card p-3 kpi-card h-100" style="border-left-color: var(--accent-green);" id="conditionCard">
+                <div class="kpi-title mb-1">Tool Condition Status</div>
+                <div class="mb-2">
+                    <span id="kpiConditionBadge" class="badge badge-healthy fs-6 px-3 py-2 fw-bold">
+                        <i class="bi bi-shield-check"></i> HEALTHY
+                    </span>
+                </div>
+                <small id="conditionSubtext" class="text-secondary" style="font-size: 0.75rem;">
+                    Flank wear is within optimal cutting range.
+                </small>
+            </div>
+        </div>
+
+        <!-- Ground Truth & Prediction Error -->
+        <div class="col-12 col-sm-6 col-lg-3">
+            <div class="card p-3 kpi-card h-100" style="border-left-color: var(--accent-amber);">
+                <div class="kpi-title mb-1">Microscope Ground Truth (VB)</div>
+                <div class="d-flex align-items-baseline gap-2 mb-1">
+                    <span id="kpiActualVb" class="kpi-value text-warning">0.000</span>
+                    <span class="text-secondary small fw-semibold">mm</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mt-2" style="font-size: 0.78rem;">
+                    <span class="text-secondary">Instant Error:</span>
+                    <span id="kpiError" class="badge bg-dark border border-secondary text-light">0.000 mm</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Key Sensor Reading -->
+        <div class="col-12 col-sm-6 col-lg-3">
+            <div class="card p-3 kpi-card h-100" style="border-left-color: var(--accent-rose);">
+                <div class="kpi-title mb-1">Critical Sensor Channels</div>
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="small text-secondary">Spindle DC Current:</span>
+                    <span id="kpiSpindleDc" class="fw-bold text-light">-- A</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="small text-secondary">Spindle Vibration RMS:</span>
+                    <span id="kpiVibSpindle" class="fw-bold text-light">-- g</span>
+                </div>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="small text-secondary">Acoustic Emission RMS:</span>
+                    <span id="kpiAeSpindle" class="fw-bold text-light">-- V</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Visualizations Grid -->
+    <div class="row g-3 mb-3">
+        <!-- Left: Continuous Wear-Trend Curve & Oscilloscope Waveforms -->
+        <div class="col-12 col-lg-8">
+            <!-- Wear Trend Chart -->
+            <div class="card p-3 mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div class="fw-bold text-light small text-uppercase">
+                        <i class="bi bi-graph-up-arrow text-info"></i> Continuous Flank Wear Trend (VB vs. Machining Pass)
+                    </div>
+                    <span id="passCounter" class="badge bg-secondary">Pass: 0 / 0</span>
+                </div>
+                <div class="chart-container" style="height: 240px;">
+                    <canvas id="wearTrendChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Real-Time Sensor Waveforms Oscilloscope -->
+            <div class="card p-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div class="fw-bold text-light small text-uppercase">
+                        <i class="bi bi-soundwave text-warning"></i> Real Sensor Waveforms (Actual NASA Recorded Channels)
+                    </div>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-secondary active" id="btnTabCurrent" onclick="switchSensorTab('current')">Current</button>
+                        <button type="button" class="btn btn-outline-secondary" id="btnTabVib" onclick="switchSensorTab('vibration')">Vibration</button>
+                        <button type="button" class="btn btn-outline-secondary" id="btnTabAe" onclick="switchSensorTab('ae')">Acoustic Emission</button>
+                    </div>
+                </div>
+                <div class="chart-container" style="height: 210px;">
+                    <canvas id="sensorWaveformChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Real-time Alert Terminal & Diagnostic Benchmarks -->
+        <div class="col-12 col-lg-4">
+            <!-- Live Alerts Terminal -->
+            <div class="card p-3 mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div class="fw-bold text-light small text-uppercase">
+                        <i class="bi bi-bell-fill text-danger"></i> Predictive Maintenance Alerts
+                    </div>
+                    <span id="alertCountBadge" class="badge bg-dark border border-danger text-danger">0 Alerts</span>
+                </div>
+                <div id="alertTerminal" class="alert-terminal">
+                    <div class="text-secondary small">
+                        [SYSTEM INITIALIZED] Ready for telemetry stream.<br>
+                        Select experimental case and click 'Start Monitoring'.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Model Benchmark Summary Card -->
+            <div class="card p-3">
+                <div class="fw-bold text-light small text-uppercase mb-2">
+                    <i class="bi bi-bar-chart-line-fill text-success"></i> Model Benchmark Diagnostics
+                </div>
+                <ul class="nav nav-pills nav-fill mb-2" id="diagnosticTabs" role="tablist">
+                    <li class="nav-item">
+                        <button class="nav-link active py-1 px-2 small" data-bs-toggle="tab" data-bs-target="#tabMetrics">Comparison</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link py-1 px-2 small" data-bs-toggle="tab" data-bs-target="#tabImportance">Features</button>
+                    </li>
+                </ul>
+                <div class="tab-content" id="diagnosticContent">
+                    <div class="tab-pane fade show active text-center" id="tabMetrics">
+                        <img src="/plots/model_comparison.png" class="img-fluid rounded border border-secondary mb-1" style="max-height: 180px;" alt="Model Comparison">
+                        <small class="text-secondary d-block" style="font-size: 0.72rem;">ANN achieves target R² = 94.12% > 92% goal.</small>
+                    </div>
+                    <div class="tab-pane fade text-center" id="tabImportance">
+                        <img src="/plots/feature_importance_top15.png" class="img-fluid rounded border border-secondary mb-1" style="max-height: 180px;" alt="Feature Importance">
+                        <small class="text-secondary d-block" style="font-size: 0.72rem;">Spindle DC Current & Spindle Vibration are most predictive.</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Telemetry Session History Table -->
+    <div class="card p-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="fw-bold text-light small text-uppercase">
+                <i class="bi bi-table text-info"></i> Monitored Machining Session Telemetry Log
+            </div>
+            <a href="/api/export_history_csv" class="btn btn-sm btn-outline-info">
+                <i class="bi bi-file-earmark-arrow-down"></i> Export Telemetry CSV
+            </a>
+        </div>
+        <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+            <table class="table table-dark table-hover table-sm table-custom mb-0 text-center">
+                <thead>
+                    <tr>
+                        <th>Pass #</th>
+                        <th>Material</th>
+                        <th>DOC (mm)</th>
+                        <th>Feed (mm/rev)</th>
+                        <th>Spindle DC (A)</th>
+                        <th>Vibration Spindle RMS</th>
+                        <th>Predicted VB (mm)</th>
+                        <th>Actual VB (mm)</th>
+                        <th>Error (mm)</th>
+                        <th>Condition</th>
+                    </tr>
+                </thead>
+                <tbody id="telemetryTableBody">
+                    <tr>
+                        <td colspan="10" class="text-secondary py-3">No machining passes processed yet.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 Bundle JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Dashboard Logic JS -->
+    <script>
+        // State variables
+        let appMetadata = null;
+        let isStreaming = false;
+        let streamTimer = null;
+        let currentStep = 0;
+        let activeSensorTab = 'current';
+        let wearTrendChart = null;
+        let sensorWaveformChart = null;
+
+        // Threshold constants
+        const HEALTHY_MAX = 0.20;
+        const WARNING_MAX = 0.40;
+
+        // Initialize application on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            initCharts();
+            await fetchMetadata();
+            
+            // Speed slider listener
+            document.getElementById('speedSlider').addEventListener('input', (e) => {
+                const ms = e.target.value;
+                document.getElementById('speedVal').innerText = (ms / 1000).toFixed(1) + 's';
+                if (isStreaming) {
+                    clearInterval(streamTimer);
+                    streamTimer = setInterval(stepSingleCut, ms);
+                }
+            });
+        });
+
+        // Initialize Chart.js instances
+        function initCharts() {
+            // 1. Wear Trend Chart
+            const ctxWear = document.getElementById('wearTrendChart').getContext('2d');
+            wearTrendChart = new Chart(ctxWear, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Predicted Flank Wear (VB)',
+                            data: [],
+                            borderColor: '#06b6d4',
+                            backgroundColor: 'rgba(6, 182, 212, 0.1)',
+                            borderWidth: 2.5,
+                            fill: true,
+                            tension: 0.2,
+                            pointRadius: 4,
+                            pointHoverRadius: 6
+                        },
+                        {
+                            label: 'Microscope Ground Truth',
+                            data: [],
+                            borderColor: '#fbbf24',
+                            backgroundColor: '#fbbf24',
+                            borderWidth: 0,
+                            pointRadius: 5,
+                            pointStyle: 'rectRot',
+                            showLine: false
+                        },
+                        {
+                            label: 'Healthy Limit (0.20 mm)',
+                            data: [],
+                            borderColor: 'rgba(16, 185, 129, 0.7)',
+                            borderDash: [5, 5],
+                            borderWidth: 1.5,
+                            pointRadius: 0,
+                            fill: false
+                        },
+                        {
+                            label: 'Replacement Threshold (0.40 mm)',
+                            data: [],
+                            borderColor: 'rgba(244, 63, 94, 0.8)',
+                            borderDash: [5, 5],
+                            borderWidth: 1.5,
+                            pointRadius: 0,
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Machining Pass (Cut #)', color: '#94a3b8' },
+                            grid: { color: '#1e293b' },
+                            ticks: { color: '#94a3b8' }
+                        },
+                        y: {
+                            title: { display: true, text: 'Flank Wear VB (mm)', color: '#94a3b8' },
+                            min: 0,
+                            suggestedMax: 0.6,
+                            grid: { color: '#1e293b' },
+                            ticks: { color: '#94a3b8' }
+                        }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1', boxWidth: 12, font: { size: 11 } } }
+                    }
+                }
+            });
+
+            // 2. Sensor Waveform Chart
+            const ctxSensor = document.getElementById('sensorWaveformChart').getContext('2d');
+            sensorWaveformChart = new Chart(ctxSensor, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: []
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Time in Cut (s) [Sampled at 250 Hz]', color: '#94a3b8' },
+                            grid: { color: '#1e293b' },
+                            ticks: { color: '#94a3b8' }
+                        },
+                        y: {
+                            title: { display: true, text: 'Sensor Signal Amplitude (V)', color: '#94a3b8' },
+                            grid: { color: '#1e293b' },
+                            ticks: { color: '#94a3b8' }
+                        }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#cbd5e1', boxWidth: 12, font: { size: 11 } } }
+                    }
+                }
+            });
+        }
+
+        // Fetch application metadata and populate dropdowns
+        async function fetchMetadata() {
+            try {
+                const res = await fetch('/api/metadata');
+                appMetadata = await res.json();
+                
+                // Populate Case selector
+                const caseSelect = document.getElementById('caseSelect');
+                caseSelect.innerHTML = '';
+                for (const [id, c] of Object.entries(appMetadata.cases)) {
+                    const opt = document.createElement('option');
+                    opt.value = id;
+                    opt.textContent = `Case ${id}: ${c.material} (DOC: ${c.DOC}mm, Feed: ${c.feed}mm/rev, ${c.total_cuts} cuts)`;
+                    caseSelect.appendChild(opt);
+                }
+
+                // Populate Model selector
+                const modelSelect = document.getElementById('modelSelect');
+                modelSelect.innerHTML = '';
+                for (const [key, m] of Object.entries(appMetadata.models)) {
+                    const opt = document.createElement('option');
+                    opt.value = key;
+                    opt.textContent = `${m.name} [R²: ${m.r2}, MAE: ${m.mae}]`;
+                    modelSelect.appendChild(opt);
+                }
+            } catch (err) {
+                console.error("Error loading metadata:", err);
+            }
+        }
+
+        // Start Continuous Streaming
+        function startContinuousStream() {
+            if (isStreaming) return;
+            isStreaming = true;
+            document.getElementById('streamStatus').innerText = 'MONITORING';
+            document.getElementById('streamStatus').className = 'text-success fw-bold';
+            document.getElementById('btnPlay').disabled = true;
+            document.getElementById('btnPause').disabled = false;
+            document.getElementById('caseSelect').disabled = true;
+
+            const speed = parseInt(document.getElementById('speedSlider').value);
+            streamTimer = setInterval(stepSingleCut, speed);
+        }
+
+        // Pause Continuous Streaming
+        function pauseContinuousStream() {
+            isStreaming = false;
+            clearInterval(streamTimer);
+            document.getElementById('streamStatus').innerText = 'PAUSED';
+            document.getElementById('streamStatus').className = 'text-warning fw-bold';
+            document.getElementById('btnPlay').disabled = false;
+            document.getElementById('btnPause').disabled = true;
+        }
+
+        // Reset Machining Run
+        async function resetMachiningRun() {
+            pauseContinuousStream();
+            currentStep = 0;
+            document.getElementById('streamStatus').innerText = 'IDLE';
+            document.getElementById('streamStatus').className = 'text-secondary';
+            document.getElementById('caseSelect').disabled = false;
+            document.getElementById('passCounter').innerText = 'Pass: 0 / 0';
+
+            // Reset KPI readouts
+            document.getElementById('kpiPredVb').innerText = '0.000';
+            document.getElementById('kpiActualVb').innerText = '0.000';
+            document.getElementById('kpiError').innerText = '0.000 mm';
+            document.getElementById('vbProgressBar').style.width = '0%';
+            
+            setConditionUI('Healthy', 'success');
+
+            // Reset Charts
+            wearTrendChart.data.labels = [];
+            wearTrendChart.data.datasets.forEach(ds => ds.data = []);
+            wearTrendChart.update();
+
+            sensorWaveformChart.data.labels = [];
+            sensorWaveformChart.data.datasets = [];
+            sensorWaveformChart.update();
+
+            // Clear table and alert terminal
+            document.getElementById('telemetryTableBody').innerHTML = '<tr><td colspan="10" class="text-secondary py-3">No machining passes processed yet.</td></tr>';
+            document.getElementById('alertTerminal').innerHTML = '<div class="text-secondary small">[SYSTEM RESET] Telemetry cleared. Ready for new monitoring run.</div>';
+            document.getElementById('alertCountBadge').innerText = '0 Alerts';
+
+            await fetch('/api/reset', { method: 'POST' });
+        }
+
+        // Step a single cut forward
+        async function stepSingleCut() {
+            const caseId = document.getElementById('caseSelect').value;
+            const modelKey = document.getElementById('modelSelect').value;
+
+            try {
+                const res = await fetch('/api/process_cut', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        case_id: parseInt(caseId),
+                        cut_step: currentStep,
+                        model_key: modelKey
+                    })
+                });
+                const data = await res.json();
+
+                if (data.status === 'completed') {
+                    pauseContinuousStream();
+                    addTerminalLog(`[COMPLETED] ${data.message}`, 'text-info');
+                    return;
+                }
+
+                if (data.status === 'success') {
+                    currentStep = data.next_step;
+                    updateUI(data);
+                }
+            } catch (err) {
+                console.error("Step execution error:", err);
+                pauseContinuousStream();
+            }
+        }
+
+        // Update Dashboard UI with Telemetry Data
+        function updateUI(data) {
+            // Update Pass counter
+            document.getElementById('passCounter').innerText = `Pass: ${data.cut_id} / ${data.total_cuts}`;
+
+            // Update KPI cards
+            const predVb = data.predicted_vb;
+            document.getElementById('kpiPredVb').innerText = predVb.toFixed(3);
+            
+            // Progress bar (scaled 0 to 0.6 mm)
+            const pct = Math.min(100, Math.round((predVb / 0.60) * 100));
+            const progBar = document.getElementById('vbProgressBar');
+            progBar.style.width = pct + '%';
+            progBar.className = `progress-bar bg-${data.condition_level}`;
+
+            // Actual Ground truth
+            if (data.actual_vb !== null) {
+                document.getElementById('kpiActualVb').innerText = data.actual_vb.toFixed(3);
+                document.getElementById('kpiError').innerText = data.error.toFixed(3) + ' mm';
+            } else {
+                document.getElementById('kpiActualVb').innerText = 'Unmeasured';
+                document.getElementById('kpiError').innerText = 'N/A';
+            }
+
+            // Sensor statistics KPI
+            document.getElementById('kpiSpindleDc').innerText = data.features.smcDC_mean.toFixed(2) + ' V';
+            document.getElementById('kpiVibSpindle').innerText = data.features.vib_spindle_rms.toFixed(3) + ' g';
+            document.getElementById('kpiAeSpindle').innerText = data.features.AE_spindle_rms.toFixed(3) + ' V';
+
+            // Condition badge update
+            setConditionUI(data.condition, data.condition_level);
+
+            // Append Alert if triggered
+            if (data.alert) {
+                const colorClass = data.alert.level === 'danger' ? 'text-danger fw-bold' : 'text-warning';
+                addTerminalLog(`[${data.alert.title}] ${data.alert.message}`, colorClass);
+                
+                // Increment alert badge count
+                const countBadge = document.getElementById('alertCountBadge');
+                const currCount = parseInt(countBadge.innerText) || 0;
+                countBadge.innerText = `${currCount + 1} Alerts`;
+            } else {
+                addTerminalLog(`[PASS #${data.cut_id}] V_B=${predVb.toFixed(3)} mm | Condition: ${data.condition}`, 'text-secondary');
+            }
+
+            // Update Wear Trend Chart
+            wearTrendChart.data.labels.push(`Cut #${data.cut_id}`);
+            wearTrendChart.data.datasets[0].data.push(predVb);
+            wearTrendChart.data.datasets[1].data.push(data.actual_vb !== null ? data.actual_vb : null);
+            wearTrendChart.data.datasets[2].data.push(HEALTHY_MAX);
+            wearTrendChart.data.datasets[3].data.push(WARNING_MAX);
+            wearTrendChart.update();
+
+            // Update Sensor Oscilloscope Waveforms
+            renderSensorWaveforms(data.waveforms);
+
+            // Prepend row to Telemetry Session Table
+            const tbody = document.getElementById('telemetryTableBody');
+            if (tbody.children[0]?.children[0]?.getAttribute('colspan')) {
+                tbody.innerHTML = '';
+            }
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="fw-bold">${data.cut_id}</td>
+                <td>${data.material_name}</td>
+                <td>${data.DOC}</td>
+                <td>${data.feed}</td>
+                <td>${data.features.smcDC_mean.toFixed(2)}</td>
+                <td>${data.features.vib_spindle_rms.toFixed(3)}</td>
+                <td class="text-info fw-bold">${predVb.toFixed(3)}</td>
+                <td class="text-warning">${data.actual_vb !== null ? data.actual_vb.toFixed(3) : '-'}</td>
+                <td>${data.error !== null ? data.error.toFixed(3) : '-'}</td>
+                <td><span class="badge badge-${data.condition.toLowerCase()}">${data.condition}</span></td>
+            `;
+            tbody.insertBefore(tr, tbody.firstChild);
+        }
+
+        // Set Condition UI state
+        function setConditionUI(condition, level) {
+            const badge = document.getElementById('kpiConditionBadge');
+            const subtext = document.getElementById('conditionSubtext');
+            const card = document.getElementById('conditionCard');
+
+            badge.className = `badge badge-${condition.toLowerCase()} fs-6 px-3 py-2 fw-bold`;
+            if (condition === 'Healthy') {
+                badge.innerHTML = '<i class="bi bi-shield-check"></i> HEALTHY';
+                subtext.innerText = 'Tool insert is sharp. Surface finish optimal.';
+                card.style.borderLeftColor = 'var(--accent-green)';
+            } else if (condition === 'Warning') {
+                badge.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> WARNING';
+                subtext.innerText = 'Moderate flank wear. Schedule replacement.';
+                card.style.borderLeftColor = 'var(--accent-amber)';
+            } else {
+                badge.innerHTML = '<i class="bi bi-x-octagon-fill"></i> CRITICAL';
+                subtext.innerText = 'Severe wear (>0.40mm). Immediate tool indexing required!';
+                card.style.borderLeftColor = 'var(--accent-rose)';
+            }
+        }
+
+        // Switch sensor oscilloscope display tab
+        function switchSensorTab(tabName) {
+            activeSensorTab = tabName;
+            ['Current', 'Vib', 'Ae'].forEach(t => {
+                document.getElementById(`btnTab${t}`).className = 'btn btn-outline-secondary';
+            });
+            if (tabName === 'current') document.getElementById('btnTabCurrent').className = 'btn btn-outline-secondary active';
+            if (tabName === 'vibration') document.getElementById('btnTabVib').className = 'btn btn-outline-secondary active';
+            if (tabName === 'ae') document.getElementById('btnTabAe').className = 'btn btn-outline-secondary active';
+        }
+
+        // Render sensor waveforms on canvas
+        function renderSensorWaveforms(waveforms) {
+            sensorWaveformChart.data.labels = waveforms.time_axis;
+            sensorWaveformChart.data.datasets = [];
+
+            if (activeSensorTab === 'current') {
+                sensorWaveformChart.data.datasets.push({
+                    label: 'Spindle DC Current (Torque / Power)',
+                    data: waveforms.smcDC,
+                    borderColor: '#38bdf8',
+                    borderWidth: 1.5,
+                    pointRadius: 0
+                });
+                sensorWaveformChart.data.datasets.push({
+                    label: 'Spindle AC Current (Dynamic Force)',
+                    data: waveforms.smcAC,
+                    borderColor: '#a855f7',
+                    borderWidth: 1.2,
+                    pointRadius: 0
+                });
+            } else if (activeSensorTab === 'vibration') {
+                sensorWaveformChart.data.datasets.push({
+                    label: 'Spindle Vibration Accelerometer (g)',
+                    data: waveforms.vib_spindle,
+                    borderColor: '#f59e0b',
+                    borderWidth: 1.5,
+                    pointRadius: 0
+                });
+                sensorWaveformChart.data.datasets.push({
+                    label: 'Table Vibration Accelerometer (g)',
+                    data: waveforms.vib_table,
+                    borderColor: '#10b981',
+                    borderWidth: 1.2,
+                    pointRadius: 0
+                });
+            } else {
+                sensorWaveformChart.data.datasets.push({
+                    label: 'Spindle Acoustic Emission RMS (V)',
+                    data: waveforms.AE_spindle,
+                    borderColor: '#f43f5e',
+                    borderWidth: 1.5,
+                    pointRadius: 0
+                });
+                sensorWaveformChart.data.datasets.push({
+                    label: 'Table Acoustic Emission RMS (V)',
+                    data: waveforms.AE_table,
+                    borderColor: '#06b6d4',
+                    borderWidth: 1.2,
+                    pointRadius: 0
+                });
+            }
+            sensorWaveformChart.update();
+        }
+
+        // Add message to terminal
+        function addTerminalLog(msg, colorClass = 'text-light') {
+            const terminal = document.getElementById('alertTerminal');
+            const time = new Date().toLocaleTimeString();
+            const div = document.createElement('div');
+            div.className = `alert-entry ${colorClass}`;
+            div.innerHTML = `<span class="text-secondary">[${time}]</span> ${msg}`;
+            terminal.appendChild(div);
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+    </script>
+</body>
+</html>
